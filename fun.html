@@ -1,0 +1,315 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>Game Hub — 12 In-Built Games</title>
+  <style>
+    :root{--bg:#0f1724;--card:#0b1220;--accent:#06b6d4;--muted:#94a3b8;--glass:rgba(255,255,255,0.03)}
+    html,body{height:100%;margin:0;font-family:Inter,Segoe UI,system-ui,Arial;background:linear-gradient(180deg,#071027 0%, #07182b 100%);color:#e6eef6}
+    header{display:flex;align-items:center;gap:16px;padding:16px 20px}
+    h1{margin:0;font-size:18px}
+    .wrap{display:grid;grid-template-columns:260px 1fr;gap:18px;padding:18px}
+    nav{background:var(--card);border-radius:12px;padding:12px;min-height:600px}
+    nav button{display:block;width:100%;text-align:left;padding:10px;border-radius:8px;border:0;background:transparent;color:var(--muted);margin-bottom:6px;cursor:pointer}
+    nav button.active{background:linear-gradient(90deg, rgba(6,182,212,0.08), rgba(99,102,241,0.02));color:#e6eef6}
+    main{background:var(--glass);padding:18px;border-radius:12px;min-height:600px}
+    .game{display:none}
+    .game.active{display:block}
+    .footer{padding:12px;text-align:center;color:var(--muted);font-size:13px}
+    canvas{background:#061022;border-radius:6px;width:100%;height:auto}
+    .controls{margin-top:8px}
+    .row{display:flex;gap:8px;flex-wrap:wrap}
+    .btn{padding:8px 12px;border-radius:8px;border:0;background:var(--accent);color:#022;cursor:pointer}
+    .small{padding:6px 8px;font-size:13px}
+    input[type=text], input[type=number]{padding:8px;border-radius:8px;border:0}
+    .grid{display:grid;gap:8px}
+    .center{display:flex;align-items:center;justify-content:center}
+    #log{min-height:80px;max-height:160px;overflow:auto;background:#02101a;padding:8px;border-radius:8px;font-family:monospace}
+  </style>
+</head>
+<body>
+  <header>
+    <img src="data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='28' height='28'><rect rx='6' width='28' height='28' fill='%2306b6d4'/></svg>" alt="logo"/>
+    <h1>Game Hub — 12 built-in games</h1>
+  </header>
+
+  <div class="wrap">
+    <nav>
+      <button class="tab-btn active" data-game="hub">🏠 Home</button>
+      <button class="tab-btn" data-game="tictactoe">❌⭕️ Tic-Tac-Toe</button>
+      <button class="tab-btn" data-game="rps">✊✌️✋ Rock Paper Scissors</button>
+      <button class="tab-btn" data-game="memory">🧠 Memory Match</button>
+      <button class="tab-btn" data-game="snake">🐍 Snake</button>
+      <button class="tab-btn" data-game="pong">🏓 Pong</button>
+      <button class="tab-btn" data-game="breakout">🧱 Breakout</button>
+      <button class="tab-btn" data-game="guess">🔢 Guess Number</button>
+      <button class="tab-btn" data-game="hangman">🪦 Hangman</button>
+      <button class="tab-btn" data-game="simon">🔴🟢 Simon</button>
+      <button class="tab-btn" data-game="whack">🔨 Whack-a-Mole</button>
+      <button class="tab-btn" data-game="mines">💣 Minesweeper (mini)</button>
+    </nav>
+
+    <main>
+      <section id="hub" class="game active">
+        <h2>Welcome to the Game Hub</h2>
+        <p>Choose any game from the left. All games run locally in this single HTML file — open-source and easy to tweak.</p>
+        <div class="row">
+          <div style="flex:1;min-width:260px;background:rgba(255,255,255,0.02);padding:12px;border-radius:8px">
+            <h3>Quick play</h3>
+            <div class="row">
+              <button class="btn small" data-play="tictactoe">Play Tic-Tac-Toe</button>
+              <button class="btn small" data-play="snake">Play Snake</button>
+              <button class="btn small" data-play="pong">Play Pong</button>
+            </div>
+          </div>
+          <div style="flex:1;min-width:260px;background:rgba(255,255,255,0.02);padding:12px;border-radius:8px">
+            <h3>Notes</h3>
+            <ul>
+              <li>All games are keyboard + mouse friendly.</li>
+              <li>Open the file offline — it works without server.</li>
+            </ul>
+          </div>
+        </div>
+      </section>
+
+      <!-- TIC TAC TOE -->
+      <section id="tictactoe" class="game">
+        <h2>Tic-Tac-Toe</h2>
+        <div id="ttt-board" style="display:grid;grid-template-columns:repeat(3,120px);gap:8px;margin:12px 0"></div>
+        <div class="row"><button class="btn" id="ttt-reset">New Game</button><div id="ttt-status" style="align-self:center;margin-left:12px"></div></div>
+      </section>
+
+      <!-- RPS -->
+      <section id="rps" class="game">
+        <h2>Rock — Paper — Scissors</h2>
+        <div class="row" style="margin:12px 0">
+          <button class="btn" data-rps="rock">Rock</button>
+          <button class="btn" data-rps="paper">Paper</button>
+          <button class="btn" data-rps="scissors">Scissors</button>
+        </div>
+        <div id="rps-log"></div>
+      </section>
+
+      <!-- MEMORY -->
+      <section id="memory" class="game">
+        <h2>Memory Match</h2>
+        <div id="mem-board" style="display:grid;grid-template-columns:repeat(4,80px);gap:8px"></div>
+        <div class="row" style="margin-top:8px"><button class="btn" id="mem-reset">Shuffle</button><div id="mem-status" style="align-self:center;margin-left:12px"></div></div>
+      </section>
+
+      <!-- SNAKE -->
+      <section id="snake" class="game">
+        <h2>Snake</h2>
+        <canvas id="snake-c" width="400" height="320"></canvas>
+        <div class="controls">Use arrow keys to control. <button class="btn" id="snake-start">Start/Restart</button><span id="snake-score" style="margin-left:12px"></span></div>
+      </section>
+
+      <!-- PONG -->
+      <section id="pong" class="game">
+        <h2>Pong</h2>
+        <canvas id="pong-c" width="600" height="300"></canvas>
+        <div class="controls">W/S to move left paddle. Up/Down to move right paddle. <button class="btn" id="pong-start">Start</button></div>
+      </section>
+
+      <!-- BREAKOUT -->
+      <section id="breakout" class="game">
+        <h2>Breakout</h2>
+        <canvas id="breakout-c" width="600" height="320"></canvas>
+        <div class="controls">Move mouse to control paddle. <button class="btn" id="breakout-start">Start</button><span id="breakout-score" style="margin-left:12px"></span></div>
+      </section>
+
+      <!-- GUESS NUMBER -->
+      <section id="guess" class="game">
+        <h2>Guess the Number</h2>
+        <p>Pick a range and try to find the secret number.</p>
+        <div class="row"><input id="guess-max" type="number" value="100" min="2"/><button class="btn" id="guess-start">Start</button></div>
+        <div style="margin-top:8px"><input id="guess-input" type="number" placeholder="Your guess"/><button class="btn" id="guess-check">Guess</button></div>
+        <div id="guess-log" style="margin-top:8px"></div>
+      </section>
+
+      <!-- HANGMAN (simple) -->
+      <section id="hangman" class="game">
+        <h2>Hangman (simple)</h2>
+        <div id="hangword" style="font-size:22px;letter-spacing:6px"></div>
+        <div style="margin-top:8px"><input id="hang-input" type="text" maxlength="1" placeholder="letter"/><button class="btn" id="hang-guess">Guess</button><button class="btn" id="hang-reset">New</button></div>
+        <div id="hang-log" style="margin-top:8px"></div>
+      </section>
+
+      <!-- SIMON -->
+      <section id="simon" class="game">
+        <h2>Simon Says</h2>
+        <div style="display:grid;grid-template-columns:repeat(2,120px);gap:8px;margin:12px 0">
+          <button class="simon-btn" data-color="0" style="height:120px;border-radius:12px">1</button>
+          <button class="simon-btn" data-color="1" style="height:120px;border-radius:12px">2</button>
+          <button class="simon-btn" data-color="2" style="height:120px;border-radius:12px">3</button>
+          <button class="simon-btn" data-color="3" style="height:120px;border-radius:12px">4</button>
+        </div>
+        <div class="row"><button class="btn" id="simon-start">Start</button><div id="simon-level" style="align-self:center;margin-left:12px"></div></div>
+      </section>
+
+      <!-- WHACK-A-MOLE -->
+      <section id="whack" class="game">
+        <h2>Whack-a-Mole</h2>
+        <div id="whack-board" style="display:grid;grid-template-columns:repeat(4,80px);gap:8px"></div>
+        <div class="row"><button class="btn" id="whack-start">Start</button><div id="whack-score" style="align-self:center;margin-left:12px"></div></div>
+      </section>
+
+      <!-- MINESWEEPER (mini) -->
+      <section id="mines" class="game">
+        <h2>Minesweeper (mini 6x6)</h2>
+        <div id="mines-board" style="display:grid;grid-template-columns:repeat(6,40px);gap:4px"></div>
+        <div class="row"><button class="btn" id="mines-reset">Reset</button><div id="mines-status" style="align-self:center;margin-left:12px"></div></div>
+      </section>
+
+    </main>
+  </div>
+
+  <div class="footer">Made with ❤️ — single-file game hub. Want more games or code explanations? Ask me which one to expand.</div>
+
+  <script>
+  // --- Tab navigation ---
+  document.querySelectorAll('.tab-btn').forEach(b=>b.addEventListener('click',()=>{
+    document.querySelectorAll('.tab-btn').forEach(x=>x.classList.remove('active'));
+    b.classList.add('active');
+    let g = b.dataset.game;
+    document.querySelectorAll('.game').forEach(s=>s.classList.remove('active'));
+    document.getElementById(g).classList.add('active');
+  }));
+  document.querySelectorAll('[data-play]').forEach(b=>b.addEventListener('click',e=>{
+    let g = b.dataset.play; document.querySelector(`[data-game="${g}"]`).click();
+  }));
+
+  // ------------------ Tic-Tac-Toe ------------------
+  (function(){
+    const boardEl = document.getElementById('ttt-board'); const status = document.getElementById('ttt-status');
+    let board, turn, over;
+    function render(){ boardEl.innerHTML=''; board.forEach((c,i)=>{
+      const btn = document.createElement('button'); btn.style.width='120px'; btn.style.height='120px'; btn.style.fontSize='44px'; btn.textContent=c||'';
+      btn.addEventListener('click',()=>{ if(over||c) return; board[i]=turn; turn = turn==='X'?'O':'X'; check(); render(); });
+      boardEl.appendChild(btn);
+    }); status.textContent = over? 'Game over' : `Turn: ${turn}`;
+    }
+    function check(){ const lines=[[0,1,2],[3,4,5],[6,7,8],[0,3,6],[1,4,7],[2,5,8],[0,4,8],[2,4,6]]; for(const l of lines){ if(board[l[0]] && board[l[0]]===board[l[1]] && board[l[1]]===board[l[2]]){ over=true; status.textContent = board[l[0]]+' wins!'; return;} } if(board.every(Boolean)){ over=true; status.textContent='Draw'; }
+    }
+    function reset(){ board=Array(9).fill(null); turn='X'; over=false; render(); }
+    document.getElementById('ttt-reset').addEventListener('click',reset); reset();
+  })();
+
+  // ------------------ RPS ------------------
+  (function(){
+    const log = document.getElementById('rps-log');
+    document.querySelectorAll('[data-rps]').forEach(b=>b.addEventListener('click',()=>{
+      const you = b.dataset.rps; const opts=['rock','paper','scissors']; const ai=opts[Math.floor(Math.random()*3)];
+      let res = 'Draw'; if((you==='rock'&&ai==='scissors')||(you==='scissors'&&ai==='paper')||(you==='paper'&&ai==='rock')) res='You win!'; else if(you!==ai) res='You lose.';
+      log.innerHTML = `<div>You: ${you} — AI: ${ai} → <b>${res}</b></div>` + log.innerHTML;
+    }));
+  })();
+
+  // ------------------ Memory ------------------
+  (function(){
+    const board = document.getElementById('mem-board'); const status = document.getElementById('mem-status'); let items=[]; let opened=[], matched=[];
+    function shuffle(a){ for(let i=a.length-1;i>0;i--){ const j=Math.floor(Math.random()*(i+1)); [a[i],a[j]]=[a[j],a[i]]; } }
+    function render(){ board.innerHTML=''; items.forEach((v,i)=>{
+      const b=document.createElement('button'); b.style.height='80px'; b.style.width='80px'; b.textContent = matched.includes(i) || opened.includes(i) ? v : '';
+      b.addEventListener('click',()=>{ if(matched.includes(i)||opened.includes(i)) return; opened.push(i); if(opened.length===2){ if(items[opened[0]]===items[opened[1]]){ matched.push(...opened); opened=[]; status.textContent = matched.length===items.length? 'You win!':'Match!'; } else { render(); setTimeout(()=>{ opened=[]; render(); },700); } } render(); }); board.appendChild(b);
+    }); }
+    function reset(){ const base = ['A','B','C','D','E','F','G','H'].slice(0,8); items = base.concat(base); shuffle(items); opened=[]; matched=[]; status.textContent=''; render(); }
+    document.getElementById('mem-reset').addEventListener('click',reset); reset();
+  })();
+
+  // ------------------ Snake ------------------
+  (function(){
+    const c = document.getElementById('snake-c'); const ctx = c.getContext('2d'); const startBtn=document.getElementById('snake-start'); const scoreEl=document.getElementById('snake-score');
+    let grid=16, snake, dir, food, running, timer;
+    function reset(){ clearInterval(timer); snake=[{x:8,y:6}]; dir={x:1,y:0}; placeFood(); running=false; draw(); scoreEl.textContent=''; }
+    function placeFood(){ food = {x: Math.floor(Math.random()* (c.width/grid)), y: Math.floor(Math.random()* (c.height/grid))}; }
+    function draw(){ ctx.clearRect(0,0,c.width,c.height); // snake
+      ctx.fillStyle='#82f'; snake.forEach(s=>ctx.fillRect(s.x*grid+1,s.y*grid+1,grid-2,grid-2)); ctx.fillStyle='#f66'; ctx.fillRect(food.x*grid+1,food.y*grid+1,grid-2,grid-2);
+    }
+    function step(){ const head = {x: snake[0].x+dir.x, y: snake[0].y+dir.y}; if(head.x<0||head.y<0||head.x>=c.width/grid||head.y>=c.height/grid || snake.some(s=>s.x===head.x && s.y===head.y)){ clearInterval(timer); running=false; scoreEl.textContent='Game over — score '+(snake.length-1); return; }
+      snake.unshift(head); if(head.x===food.x && head.y===food.y){ placeFood(); } else snake.pop(); draw();
+    }
+    window.addEventListener('keydown',e=>{
+      if(e.key.includes('Arrow')){
+        const map={ArrowUp:{x:0,y:-1},ArrowDown:{x:0,y:1},ArrowLeft:{x:-1,y:0},ArrowRight:{x:1,y:0}}; const nd=map[e.key]; if(nd.x===-dir.x && nd.y===-dir.y) return; dir=nd; }
+    });
+    startBtn.addEventListener('click',()=>{ if(running){ reset(); } timer = setInterval(step,120); running=true; }); reset();
+  })();
+
+  // ------------------ Pong ------------------
+  (function(){
+    const c=document.getElementById('pong-c'); const ctx=c.getContext('2d'); const start=document.getElementById('pong-start'); let lY=110,rY=110,ball,vel,aiSpeed=2,loop;
+    function reset(){ lY=110; rY=110; ball={x:c.width/2,y:c.height/2}; vel={x:4*(Math.random()>0.5?1:-1),y:2}; draw(); }
+    function draw(){ ctx.clearRect(0,0,c.width,c.height); ctx.fillStyle='#fff'; ctx.fillRect(20,lY,10,80); ctx.fillRect(c.width-30,rY,10,80); ctx.beginPath(); ctx.arc(ball.x,ball.y,8,0,Math.PI*2); ctx.fill(); }
+    function step(){ ball.x+=vel.x; ball.y+=vel.y; if(ball.y<8||ball.y>c.height-8) vel.y*=-1; // paddles
+      if(ball.x<40 && ball.x>20 && ball.y>lY && ball.y<lY+80) vel.x*=-1; if(ball.x>c.width-40 && ball.x<c.width-20 && ball.y>rY && ball.y<rY+80) vel.x*=-1;
+      // simple ai
+      if(rY +40 < ball.y) rY+=aiSpeed; if(rY+40>ball.y) rY-=aiSpeed; draw();
+    }
+    start.addEventListener('click',()=>{ clearInterval(loop); reset(); loop=setInterval(step,16); }); window.addEventListener('keydown',e=>{ if(e.key==='w') lY-=20; if(e.key==='s') lY+=20; if(e.key==='ArrowUp') rY-=20; if(e.key==='ArrowDown') rY+=20; }); reset();
+  })();
+
+  // ------------------ Breakout ------------------
+  (function(){
+    const c=document.getElementById('breakout-c'); const ctx=c.getContext('2d'); const start=document.getElementById('breakout-start'); const scoreEl=document.getElementById('breakout-score'); let bricks, paddle, ball, loop;
+    function makeBricks(){ bricks=[]; for(let r=0;r<4;r++){ for(let c2=0;c2<8;c2++){ bricks.push({x:60*c2+10,y:30*r+20,w:56,h:18,alive:true}); } } }
+    function reset(){ makeBricks(); paddle={x:250,w:100}; ball={x:300,y:240,dx:3,dy:-3,r:8}; scoreEl.textContent=''; draw(); }
+    function draw(){ ctx.clearRect(0,0,c.width,c.height); ctx.fillStyle='#fff'; ctx.fillRect(paddle.x,c.height-20,paddle.w,10); ctx.beginPath(); ctx.arc(ball.x,ball.y,ball.r,0,Math.PI*2); ctx.fill(); bricks.forEach(b=>{ if(b.alive){ ctx.fillRect(b.x,b.y,b.w,b.h); } }); }
+    function step(){ ball.x+=ball.dx; ball.y+=ball.dy; if(ball.x<ball.r||ball.x>c.width-ball.r) ball.dx*=-1; if(ball.y<ball.r) ball.dy*=-1; if(ball.y>c.height){ clearInterval(loop); scoreEl.textContent='Game over'; }
+      if(ball.y>c.height-30 && ball.x>paddle.x && ball.x<paddle.x+paddle.w) ball.dy*=-1;
+      bricks.forEach(b=>{ if(b.alive && ball.x> b.x && ball.x<b.x+b.w && ball.y> b.y && ball.y< b.y+b.h){ b.alive=false; ball.dy*=-1; } }); draw(); }
+    c.addEventListener('mousemove',e=>{ const rect=c.getBoundingClientRect(); paddle.x = Math.max(0, Math.min(c.width-paddle.w, e.clientX-rect.left - paddle.w/2)); }); start.addEventListener('click',()=>{ clearInterval(loop); reset(); loop=setInterval(step,16); }); reset();
+  })();
+
+  // ------------------ Guess Number ------------------
+  (function(){
+    const start=document.getElementById('guess-start'); const maxEl=document.getElementById('guess-max'); const inEl=document.getElementById('guess-input'); const log=document.getElementById('guess-log'); let secret, tries;
+    start.addEventListener('click',()=>{ const max = Math.max(2, Number(maxEl.value)||100); secret = Math.floor(Math.random()*max)+1; tries=0; log.textContent = `Started! Guess between 1 and ${max}.`; });
+    document.getElementById('guess-check').addEventListener('click',()=>{ const g=Number(inEl.value); if(!secret){ log.textContent='Press Start first.'; return;} tries++; if(g===secret) log.textContent=`Correct! ${secret} in ${tries} tries.`; else if(g<secret) log.textContent='Too low.'; else log.textContent='Too high.'; });
+  })();
+
+  // ------------------ Hangman ------------------
+  (function(){
+    const words=['JAVASCRIPT','HANGMAN','BROWSER','GITHUB','PUZZLE']; let word, masked, tries;
+    function reset(){ word = words[Math.floor(Math.random()*words.length)]; masked = Array.from(word).map(()=>'_'); tries=6; document.getElementById('hangword').textContent = masked.join(' '); document.getElementById('hang-log').textContent=''; }
+    document.getElementById('hang-guess').addEventListener('click',()=>{ const l=document.getElementById('hang-input').value.toUpperCase(); document.getElementById('hang-input').value=''; if(!l) return; if(word.includes(l)){ Array.from(word).forEach((ch,i)=>{ if(ch===l) masked[i]=l; }); document.getElementById('hangword').textContent = masked.join(' '); if(!masked.includes('_')) document.getElementById('hang-log').textContent='You win!'; }
+      else{ tries--; document.getElementById('hang-log').textContent = `Wrong. ${tries} tries left.`; if(tries<=0) document.getElementById('hang-log').textContent = 'You lost — word: '+word; }
+    }); document.getElementById('hang-reset').addEventListener('click',reset); reset();
+  })();
+
+  // ------------------ Simon ------------------
+  (function(){
+    const seq=[]; let player=[], level=0; const buttons=document.querySelectorAll('.simon-btn'); const lvl=document.getElementById('simon-level'); function flash(i){ buttons[i].style.transform='scale(1.06)'; setTimeout(()=>buttons[i].style.transform='scale(1)',300); }
+    function next(){ seq.push(Math.floor(Math.random()*4)); level++; lvl.textContent='Level: '+level; playSeq(); }
+    function playSeq(){ let i=0; const t=setInterval(()=>{ flash(seq[i]); i++; if(i>=seq.length) clearInterval(t); },600); player=[]; }
+    buttons.forEach(b=>b.addEventListener('click',()=>{ const i=Number(b.dataset.color); player.push(i); const ok = player.every((v,idx)=>v===seq[idx]); if(!ok){ lvl.textContent='Wrong! Press Start'; seq.length=0; level=0; player=[]; } else if(player.length===seq.length){ setTimeout(next,500); } }));
+    document.getElementById('simon-start').addEventListener('click',next);
+  })();
+
+  // ------------------ Whack-a-Mole ------------------
+  (function(){
+    const board=document.getElementById('whack-board'); const scoreEl=document.getElementById('whack-score'); let score=0, timer;
+    function setup(){ board.innerHTML=''; for(let i=0;i<12;i++){ const b=document.createElement('button'); b.style.height='80px'; b.style.width='80px'; b.dataset.index=i; b.addEventListener('click',()=>{ if(b.classList.contains('mole')){ score++; scoreEl.textContent='Score: '+score; b.classList.remove('mole'); } }); board.appendChild(b); } }
+    function start(){ score=0; scoreEl.textContent='Score: 0'; clearInterval(timer); timer=setInterval(()=>{ document.querySelectorAll('#whack-board button').forEach(x=>x.classList.remove('mole')); const i=Math.floor(Math.random()*12); board.children[i].classList.add('mole'); },700); }
+    document.getElementById('whack-start').addEventListener('click',start); setup();
+  })();
+
+  // ------------------ Minesweeper (mini) ------------------
+  (function(){
+    const board=document.getElementById('mines-board'); const status=document.getElementById('mines-status'); const size=6; let cells=[];
+    function idx(x,y){ return y*size+x; }
+    function neighbors(x,y){ const n=[]; for(let dx=-1;dx<=1;dx++) for(let dy=-1;dy<=1;dy++){ if(dx===0&&dy===0) continue; const nx=x+dx, ny=y+dy; if(nx>=0&&ny>=0&&nx<size&&ny<size) n.push([nx,ny]); } return n; }
+    function reset(){ board.innerHTML=''; cells=[]; const mines=new Set(); while(mines.size<8) mines.add(Math.floor(Math.random()*size*size)); for(let y=0;y<size;y++) for(let x=0;x<size;x++){ const i=idx(x,y); const cell={x,y,el:document.createElement('button'), mine:mines.has(i), open:false, flagged:false}; cell.el.style.width='40px'; cell.el.style.height='40px'; cell.el.addEventListener('click',()=>{ openCell(cell); }); cell.el.addEventListener('contextmenu',e=>{ e.preventDefault(); cell.flagged=!cell.flagged; cell.el.textContent = cell.flagged? '🚩': ''; }); board.appendChild(cell.el); cells.push(cell); }
+    }
+    function openCell(cell){ if(cell.open||cell.flagged) return; if(cell.mine){ cell.el.textContent='💣'; status.textContent='Boom — you lost'; revealAll(); return; } cell.open=true; const n = neighbors(cell.x,cell.y); let cnt=0; n.forEach(([nx,ny])=>{ if(cells[idx(nx,ny)].mine) cnt++; }); if(cnt>0) cell.el.textContent=cnt; else{ n.forEach(([nx,ny])=>openCell(cells[idx(nx,ny)])); }
+    }
+    function revealAll(){ cells.forEach(c=>{ if(c.mine) c.el.textContent='💣'; }); }
+    document.getElementById('mines-reset').addEventListener('click',reset); reset();
+  })();
+
+  // --- small UX improvements: allow switching games via buttons ---
+  document.querySelectorAll('button[data-game]').forEach(b=>b.addEventListener('click',()=>document.querySelector(`button[data-game]`)));
+  </script>
+</body>
+</html>
