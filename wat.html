@@ -1,0 +1,226 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Markov Chatbot - Words Only</title>
+<style>
+  body { font-family: monospace; background: #111; color: #eee; display: flex; flex-direction: column; align-items: center; padding: 20px; }
+  #chat { width: 80%; max-width: 700px; height: 400px; overflow-y: auto; background: #222; padding: 10px; border-radius: 8px; margin-bottom: 10px; }
+  .message { margin: 5px 0; }
+  .user { color: #4caf50; }
+  .bot { color: #ff9800; }
+  .bot .score { font-size: 0.8em; color: #bbb; margin-left: 5px; }
+  #input { width: 80%; max-width: 700px; display: flex; }
+  input { flex: 1; padding: 10px; border-radius: 5px 0 0 5px; border: none; }
+  button { padding: 10px; border: none; background: #4caf50; color: white; cursor: pointer; border-radius: 0 5px 5px 0; }
+  button.feedback { background: #f44336; margin-left: 5px; }
+  button.delete { background: #555; margin-top: 5px; }
+</style>
+</head>
+<body>
+
+<h1>Markov Chatbot - Words Only</h1>
+<div id="chat"></div>
+<div id="input">
+  <input type="text" id="userInput" placeholder="Type a message...">
+  <button onclick="sendMessage()">Send</button>
+</div>
+<div style="margin-top: 5px;">
+  <button class="feedback" onclick="giveFeedback('good')">Good</button>
+  <button class="feedback" onclick="giveFeedback('bad')">Bad</button>
+</div>
+<div>
+  <button class="delete" onclick="deleteAllData()">Delete All Training Data</button>
+</div>
+
+<script>
+let chat = document.getElementById('chat');
+let input = document.getElementById('userInput');
+
+let history = JSON.parse(localStorage.getItem('chatHistory') || '[]');
+let sequenceMemory = JSON.parse(localStorage.getItem('sequenceMemory') || '{}');
+
+// Load words
+let wordsSet = new Set();
+fetch('words.txt').then(r => r.text()).then(text => {
+    text.split(/\r?\n/).forEach(w => {
+        if (w) wordsSet.add(w.toLowerCase());
+    });
+}).catch(e => console.warn('Could not load words.txt', e));
+
+function getSequences(words) {
+    let seqs = [];
+    for(let len=1; len<=3; len++){
+        for(let i=0; i<=words.length-len; i++){
+            seqs.push(words.slice(i,i+len).join(' '));
+        }
+    }
+    return seqs;
+}
+
+function decayMemory() {
+    for (let seq in sequenceMemory) {
+        sequenceMemory[seq].good *= 0.995;
+        sequenceMemory[seq].bad *= 0.995;
+        for (let next in sequenceMemory[seq].next) {
+            sequenceMemory[seq].next[next] *= 0.995;
+        }
+    }
+}
+
+function renderChat() {
+    chat.innerHTML = '';
+    history.forEach(item => {
+        let div = document.createElement('div');
+        div.className = 'message ' + item.sender;
+        div.textContent = (item.sender === 'user' ? 'You: ' : 'Bot: ') + item.text;
+        if(item.sender==='bot' && item.score!==undefined){
+            let span = document.createElement('span');
+            span.className='score';
+            span.textContent='(confidence: '+item.score.toFixed(1)+')';
+            div.appendChild(span);
+        }
+        chat.appendChild(div);
+    });
+    chat.scrollTop = chat.scrollHeight;
+}
+
+function weightedRandom(options) {
+    let sum = options.reduce((a,b)=>a+b.weight,0);
+    if(sum===0) return options[0]?.value || '';
+    let r = Math.random() * sum;
+    for(let i=0;i<options.length;i++){
+        if(r < options[i].weight) return options[i].value;
+        r -= options[i].weight;
+    }
+    return options[options.length-1].value;
+}
+
+function generateMessage(numWords=10, userContext='') {
+    let resultWords = [];
+    let allSequences = Object.keys(sequenceMemory).filter(seq => (sequenceMemory[seq].good||0)-(sequenceMemory[seq].bad||0) > 0);
+
+    if(allSequences.length===0){
+        // Pick random words if no memory
+        let wordsArray = Array.from(wordsSet);
+        for(let i=0;i<numWords;i++) resultWords.push(wordsArray[Math.floor(Math.random()*wordsArray.length)]);
+        return resultWords.join(' ');
+    }
+
+    // Start with a random sequence from memory
+    let startOptions = allSequences.filter(seq => userContext.includes(seq));
+    let seq = startOptions.length>0 ? startOptions[Math.floor(Math.random()*startOptions.length)]
+                                    : allSequences[Math.floor(Math.random()*allSequences.length)];
+    resultWords.push(...seq.split(' '));
+
+    while(resultWords.length < numWords){
+        let lastSeq = resultWords.slice(-3).join(' ');
+        let nextMemory = sequenceMemory[lastSeq]?.next || {};
+        let options = [];
+        for(let k in nextMemory){
+            let weight = nextMemory[k];
+            // only use sequences with words in the dictionary
+            if(k.split(' ').every(w=>wordsSet.has(w.toLowerCase()))) weight *= 2;
+            options.push({value:k, weight:weight});
+        }
+
+        if(options.length>0){
+            let nextSeq = weightedRandom(options);
+            resultWords.push(...nextSeq.split(' '));
+        } else {
+            let wordsArray = Array.from(wordsSet);
+            resultWords.push(wordsArray[Math.floor(Math.random()*wordsArray.length)]);
+        }
+    }
+
+    return resultWords.slice(0,numWords).join(' ');
+}
+
+function scoreMessage(msg) {
+    let words = msg.split(' ');
+    let seqs = getSequences(words);
+    let score = 0;
+    for(let seq of seqs){
+        let mem = sequenceMemory[seq] || {good:0,bad:0};
+        score += mem.good - mem.bad;
+    }
+    return score;
+}
+
+function bestOfTen(userContext=''){
+    let candidates = [];
+    for(let i=0;i<10;i++){
+        let msg = generateMessage(Math.floor(Math.random()*10)+5, userContext);
+        let score = scoreMessage(msg);
+        candidates.push({msg, score});
+    }
+    candidates.sort((a,b)=>b.score-a.score);
+    return candidates[0];
+}
+
+function updateMemory(message, type){
+    let words = message.split(' ');
+    let seqs = getSequences(words);
+    for(let i=0;i<seqs.length;i++){
+        if(!sequenceMemory[seqs[i]]) sequenceMemory[seqs[i]]={good:0,bad:0,next:{}};
+        sequenceMemory[seqs[i]][type]++;
+        if(i<seqs.length-1){
+            let nextSeq = seqs[i+1];
+            if(!sequenceMemory[seqs[i]].next[nextSeq]) sequenceMemory[seqs[i]].next[nextSeq]=0;
+            sequenceMemory[seqs[i]].next[nextSeq]++;
+        }
+    }
+    decayMemory();
+}
+
+function sendMessage(){
+    let userText = input.value.trim();
+    if(!userText) return;
+    history.push({sender:'user', text:userText});
+    input.value='';
+    let bot = bestOfTen(userText);
+    history.push({sender:'bot', text:bot.msg, score:bot.score});
+    localStorage.setItem('chatHistory', JSON.stringify(history));
+    localStorage.setItem('sequenceMemory', JSON.stringify(sequenceMemory));
+    renderChat();
+}
+
+function giveFeedback(type){
+    if(history.length===0) return;
+    let lastIndex = [...history].reverse().findIndex(m=>m.sender==='bot');
+    if(lastIndex===-1) return;
+    let botIndex = history.length-1-lastIndex;
+    let lastBot = history[botIndex];
+
+    updateMemory(lastBot.text, type);
+
+    if(type==='bad'){
+        let lastUser = [...history].reverse().find(m=>m.sender==='user')?.text || '';
+        if(lastUser){
+            let newBot = bestOfTen(lastUser);
+            history[botIndex].text = newBot.msg;
+            history[botIndex].score = newBot.score;
+        }
+    } else {
+        history[botIndex].score = scoreMessage(lastBot.text);
+    }
+
+    localStorage.setItem('chatHistory', JSON.stringify(history));
+    localStorage.setItem('sequenceMemory', JSON.stringify(sequenceMemory));
+    renderChat();
+}
+
+function deleteAllData(){
+    if(!confirm("Are you sure you want to delete all training data? This cannot be undone.")) return;
+    history = [];
+    sequenceMemory = {};
+    localStorage.removeItem('chatHistory');
+    localStorage.removeItem('sequenceMemory');
+    renderChat();
+}
+
+renderChat();
+</script>
+
+</body>
+</html>
