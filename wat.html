@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8">
-<title>Markov Chatbot - Words Only</title>
+<title>Markov Chatbot - Smarter</title>
 <style>
   body { font-family: monospace; background: #111; color: #eee; display: flex; flex-direction: column; align-items: center; padding: 20px; }
   #chat { width: 80%; max-width: 700px; height: 400px; overflow-y: auto; background: #222; padding: 10px; border-radius: 8px; margin-bottom: 10px; }
@@ -19,7 +19,7 @@
 </head>
 <body>
 
-<h1>Markov Chatbot - Words Only</h1>
+<h1>Markov Chatbot - Smarter</h1>
 <div id="chat"></div>
 <div id="input">
   <input type="text" id="userInput" placeholder="Type a message...">
@@ -40,17 +40,14 @@ let input = document.getElementById('userInput');
 let history = JSON.parse(localStorage.getItem('chatHistory') || '[]');
 let sequenceMemory = JSON.parse(localStorage.getItem('sequenceMemory') || '{}');
 
-// Load words
 let wordsSet = new Set();
 fetch('words.txt').then(r => r.text()).then(text => {
-    text.split(/\r?\n/).forEach(w => {
-        if (w) wordsSet.add(w.toLowerCase());
-    });
+    text.split(/\r?\n/).forEach(w => { if (w) wordsSet.add(w.toLowerCase()); });
 }).catch(e => console.warn('Could not load words.txt', e));
 
-function getSequences(words) {
+function getSequences(words, maxLen=4) {
     let seqs = [];
-    for(let len=1; len<=3; len++){
+    for(let len=1; len<=maxLen; len++){
         for(let i=0; i<=words.length-len; i++){
             seqs.push(words.slice(i,i+len).join(' '));
         }
@@ -60,10 +57,10 @@ function getSequences(words) {
 
 function decayMemory() {
     for (let seq in sequenceMemory) {
-        sequenceMemory[seq].good *= 0.995;
-        sequenceMemory[seq].bad *= 0.995;
+        sequenceMemory[seq].good *= 0.997;
+        sequenceMemory[seq].bad *= 0.997;
         for (let next in sequenceMemory[seq].next) {
-            sequenceMemory[seq].next[next] *= 0.995;
+            sequenceMemory[seq].next[next] *= 0.997;
         }
     }
 }
@@ -98,35 +95,37 @@ function weightedRandom(options) {
 
 function generateMessage(numWords=10, userContext='') {
     let resultWords = [];
+    let usedSequences = new Set();
     let allSequences = Object.keys(sequenceMemory).filter(seq => (sequenceMemory[seq].good||0)-(sequenceMemory[seq].bad||0) > 0);
 
     if(allSequences.length===0){
-        // Pick random words if no memory
         let wordsArray = Array.from(wordsSet);
         for(let i=0;i<numWords;i++) resultWords.push(wordsArray[Math.floor(Math.random()*wordsArray.length)]);
         return resultWords.join(' ');
     }
 
-    // Start with a random sequence from memory
     let startOptions = allSequences.filter(seq => userContext.includes(seq));
     let seq = startOptions.length>0 ? startOptions[Math.floor(Math.random()*startOptions.length)]
                                     : allSequences[Math.floor(Math.random()*allSequences.length)];
     resultWords.push(...seq.split(' '));
+    usedSequences.add(seq);
 
     while(resultWords.length < numWords){
-        let lastSeq = resultWords.slice(-3).join(' ');
+        let lastSeq = resultWords.slice(-4).join(' ');
         let nextMemory = sequenceMemory[lastSeq]?.next || {};
         let options = [];
         for(let k in nextMemory){
+            if(usedSequences.has(k)) continue;
             let weight = nextMemory[k];
-            // only use sequences with words in the dictionary
             if(k.split(' ').every(w=>wordsSet.has(w.toLowerCase()))) weight *= 2;
+            if(userContext.includes(k)) weight *= 1.5;
             options.push({value:k, weight:weight});
         }
 
         if(options.length>0){
             let nextSeq = weightedRandom(options);
             resultWords.push(...nextSeq.split(' '));
+            usedSequences.add(nextSeq);
         } else {
             let wordsArray = Array.from(wordsSet);
             resultWords.push(wordsArray[Math.floor(Math.random()*wordsArray.length)]);
@@ -136,13 +135,14 @@ function generateMessage(numWords=10, userContext='') {
     return resultWords.slice(0,numWords).join(' ');
 }
 
-function scoreMessage(msg) {
+function scoreMessage(msg, userContext='') {
     let words = msg.split(' ');
     let seqs = getSequences(words);
     let score = 0;
     for(let seq of seqs){
         let mem = sequenceMemory[seq] || {good:0,bad:0};
         score += mem.good - mem.bad;
+        if(userContext.includes(seq)) score += 0.5; // context bonus
     }
     return score;
 }
@@ -151,7 +151,7 @@ function bestOfTen(userContext=''){
     let candidates = [];
     for(let i=0;i<10;i++){
         let msg = generateMessage(Math.floor(Math.random()*10)+5, userContext);
-        let score = scoreMessage(msg);
+        let score = scoreMessage(msg, userContext);
         candidates.push({msg, score});
     }
     candidates.sort((a,b)=>b.score-a.score);
@@ -202,7 +202,7 @@ function giveFeedback(type){
             history[botIndex].score = newBot.score;
         }
     } else {
-        history[botIndex].score = scoreMessage(lastBot.text);
+        history[botIndex].score = scoreMessage(lastBot.text, [...history].reverse().find(m=>m.sender==='user')?.text || '');
     }
 
     localStorage.setItem('chatHistory', JSON.stringify(history));
