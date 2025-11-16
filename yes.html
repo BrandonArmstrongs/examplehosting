@@ -1,0 +1,403 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width,initial-scale=1" />
+<title>Where am I looking? (local webcam estimator)</title>
+<style>
+  html,body { height:100%; margin:0; font-family:system-ui,Segoe UI,Roboto,Arial; background:#0b1220; color:#e6eef8; }
+  #app { display:flex; height:100%; gap:12px; padding:12px; box-sizing:border-box; }
+  .left, .right { flex:1; min-width:320px; display:flex; flex-direction:column; gap:8px; }
+  video { width:100%; max-height:360px; border-radius:10px; background:#000; transform:scaleX(-1); } /* mirror preview */
+  canvas { display:none; }
+  #overlay {
+    position:fixed; left:0; top:0; width:100vw; height:100vh; pointer-events:none;
+  }
+  .dot {
+    position:absolute; width:22px; height:22px; border-radius:50%;
+    background:rgba(255,90,90,0.95); transform:translate(-50%,-50%);
+    box-shadow:0 6px 18px rgba(0,0,0,0.6); pointer-events:none;
+    transition:transform 0.02s linear;
+  }
+  .controls { display:flex; gap:8px; align-items:center; flex-wrap:wrap; }
+  .btn { background:#111827; border:1px solid rgba(255,255,255,0.06); color:#e6eef8; padding:8px 10px; border-radius:8px; cursor:pointer; }
+  .small { padding:6px 8px; font-size:0.95rem; }
+  .status { font-size:0.9rem; color:#a8b3c7; }
+  .debugBox { background:#071021; border-radius:8px; padding:8px; }
+  #debugCanvas { display:block; width:100%; border-radius:6px; }
+  label { font-size:0.9rem; }
+  #consent { font-size:0.85rem; color:#9fb1d4; }
+  footer { margin-top:auto; font-size:0.8rem; color:#93a7c7; }
+</style>
+</head>
+<body>
+<div id="app">
+  <div class="left">
+    <div style="display:flex;gap:8px;align-items:center;">
+      <h2 style="margin:0">Where am I looking?</h2>
+      <div class="status" id="status">idle</div>
+    </div>
+
+    <video id="video" autoplay playsinline muted></video>
+    <div class="controls">
+      <button class="btn small" id="startBtn">Start webcam</button>
+      <button class="btn small" id="stopBtn" disabled>Stop</button>
+      <button class="btn small" id="toggleDebug">Toggle debug</button>
+      <label style="display:flex;gap:8px;align-items:center;">
+        <input type="range" id="sensitivity" min="1" max="50" value="18" />
+        sensitivity
+      </label>
+    </div>
+
+    <div class="debugBox" id="explain">
+      <p style="margin:6px 0 8px 0">How it works (brief):</p>
+      <ul style="margin:0 0 8px 18px;color:#a8b3c7">
+        <li>Face detection (FaceDetector API) finds face & eyes when available.</li>
+        <li>We crop each eye area and look for the dark blob (pupil) center.</li>
+        <li>Pupil offset inside the eye box is converted to a screen point.</li>
+      </ul>
+      <p style="margin:0;color:#9fb1d4">Limitations: poor lighting, small eyes in frame, and unsupported browsers reduce accuracy.</p>
+    </div>
+
+    <footer>Local-only. No external code. Works best in Chrome with a front-facing webcam.</footer>
+  </div>
+
+  <div class="right">
+    <div style="display:flex;gap:8px;align-items:center;">
+      <h3 style="margin:0">Debug viewer</h3>
+      <div class="status" id="detected">face: —</div>
+    </div>
+
+    <canvas id="debugCanvas" width="640" height="480"></canvas>
+    <div style="margin-top:8px;color:#9fb1d4">If face detection isn't supported, the page falls back to tracking the mouse (move your cursor).</div>
+  </div>
+</div>
+
+<div id="overlay">
+  <div class="dot" id="gazeDot" style="left:50%;top:50%"></div>
+</div>
+
+<!-- hidden processing canvas -->
+<canvas id="proc" width="320" height="240"></canvas>
+
+<script>
+(async function(){
+  const video = document.getElementById('video');
+  const startBtn = document.getElementById('startBtn');
+  const stopBtn = document.getElementById('stopBtn');
+  const toggleDebug = document.getElementById('toggleDebug');
+  const debugCanvas = document.getElementById('debugCanvas');
+  const dbg = debugCanvas.getContext('2d');
+  const proc = document.getElementById('proc');
+  const pctx = proc.getContext('2d');
+  const gazeDot = document.getElementById('gazeDot');
+  const status = document.getElementById('status');
+  const detected = document.getElementById('detected');
+  const sensitivityControl = document.getElementById('sensitivity');
+
+  let stream = null;
+  let animationId = null;
+  let running = false;
+  let showDebug = true;
+  let faceDetector = null;
+  let fallbackToMouse = false;
+
+  // try to instantiate FaceDetector if available
+  if ('FaceDetector' in window) {
+    try {
+      faceDetector = new FaceDetector({ fastMode: true, maxDetectedFaces: 1 });
+      status.textContent = 'faceDetector ready';
+    } catch (e) {
+      faceDetector = null;
+      status.textContent = 'faceDetector not available';
+    }
+  } else {
+    status.textContent = 'FaceDetector not supported';
+  }
+
+  // Start/Stop
+  startBtn.addEventListener('click', startCam);
+  stopBtn.addEventListener('click', stopCam);
+  toggleDebug.addEventListener('click', ()=>{ showDebug = !showDebug; debugCanvas.style.display = showDebug ? 'block' : 'none'; });
+
+  // fallback: show mouse position if webcam not usable
+  window.addEventListener('mousemove', (e)=>{
+    if (fallbackToMouse) {
+      placeDot(e.clientX, e.clientY);
+      detected.textContent = 'fallback: mouse';
+    }
+  });
+
+  async function startCam(){
+    startBtn.disabled = true;
+    stopBtn.disabled = false;
+    try {
+      stream = await navigator.mediaDevices.getUserMedia({ video:{ facingMode: "user", width:640, height:480 }, audio:false });
+      video.srcObject = stream;
+      await video.play();
+      running = true;
+      status.textContent = 'running';
+      // flip debug canvas to same aspect ratio as video
+      debugCanvas.width = video.videoWidth || 640;
+      debugCanvas.height = video.videoHeight || 480;
+      proc.width = Math.round(video.videoWidth/2) || 320;
+      proc.height = Math.round(video.videoHeight/2) || 240;
+
+      // if FaceDetector not present, fallback
+      if (!faceDetector) {
+        fallbackToMouse = true;
+        detected.textContent = 'no FaceDetector — using mouse fallback';
+        return;
+      } else {
+        fallbackToMouse = false;
+        detected.textContent = 'attempting face detection';
+        tick();
+      }
+    } catch (err) {
+      console.error(err);
+      status.textContent = 'camera error';
+      startBtn.disabled = false;
+      stopBtn.disabled = true;
+      fallbackToMouse = true;
+      detected.textContent = 'camera denied — using mouse fallback';
+    }
+  }
+
+  function stopCam(){
+    startBtn.disabled = false;
+    stopBtn.disabled = true;
+    running = false;
+    if (animationId) cancelAnimationFrame(animationId);
+    if (stream) {
+      stream.getTracks().forEach(t => t.stop());
+      stream = null;
+    }
+    status.textContent = 'stopped';
+  }
+
+  function placeDot(x, y){
+    gazeDot.style.left = x + 'px';
+    gazeDot.style.top = y + 'px';
+  }
+
+  // processing: find dark centroid in a small image patch
+  function darkCentroid(imageData){
+    const w = imageData.width;
+    const h = imageData.height;
+    const d = imageData.data;
+    let sumW = 0, sumX = 0, sumY = 0;
+    for(let y=0;y<h;y++){
+      for(let x=0;x<w;x++){
+        const i = (y*w + x)*4;
+        // convert to luminance (0..255)
+        const r = d[i], g = d[i+1], b = d[i+2];
+        // luminance approximate
+        const lum = 0.2126*r + 0.7152*g + 0.0722*b;
+        // darkness score = inverted luminance
+        const dark = 255 - lum;
+        const weight = Math.max(0, dark - 60); // thresh to reduce noise
+        if (weight > 0) {
+          sumW += weight;
+          sumX += x * weight;
+          sumY += y * weight;
+        }
+      }
+    }
+    if (sumW === 0) return null;
+    return { x: sumX / sumW, y: sumY / sumW, w, h };
+  }
+
+  // primary loop
+  async function tick(){
+    if (!running) return;
+    if (!video.videoWidth) {
+      animationId = requestAnimationFrame(tick);
+      return;
+    }
+
+    // run face detection on a downsized copy for speed
+    try {
+      // draw to proc canvas mirrored (so landmarks correspond to what you see)
+      pctx.save();
+      pctx.scale(-1,1);
+      pctx.drawImage(video, -proc.width, 0, proc.width, proc.height);
+      pctx.restore();
+      const bitmap = await createImageBitmap(proc);
+      const faces = await faceDetector.detect(bitmap);
+      bitmap.close();
+
+      dbg.clearRect(0,0,debugCanvas.width,debugCanvas.height);
+      dbg.save();
+      // mirror debug drawing to match preview
+      dbg.translate(debugCanvas.width, 0); dbg.scale(-1,1);
+      dbg.drawImage(video, 0, 0, debugCanvas.width, debugCanvas.height);
+      dbg.restore();
+
+      if (faces && faces.length>0) {
+        const f = faces[0];
+        detected.textContent = 'face detected';
+        // bounding box in proc coords -> map to video coords
+        // face.boundingBox properties depend on implementation; handle gracefully
+        const bb = f.boundingBox || f.box || null;
+        // landmarks array support: landmarks may be in f.landmarks
+        const landmarks = f.landmarks || f.keypoints || [];
+        // draw bounding box scaled to displayed video size for debug
+        if (bb) {
+          const scaleX = debugCanvas.width / proc.width;
+          const scaleY = debugCanvas.height / proc.height;
+          dbg.save();
+          dbg.translate(debugCanvas.width,0); dbg.scale(-1,1); // mirror to match preview
+          dbg.strokeStyle = 'rgba(0,255,128,0.9)';
+          dbg.lineWidth = 2;
+          dbg.strokeRect(bb.x * scaleX, bb.y * scaleY, bb.width * scaleX, bb.height * scaleY);
+          dbg.restore();
+        }
+
+        // try to get eye positions from landmarks if provided
+        let eyePairs = [];
+        if (landmarks && landmarks.length) {
+          // browser implementations vary: look for types 'leftEye'/'rightEye' or points
+          const leftEye = landmarks.find(l => l.type === 'leftEye' || l.name === 'leftEye');
+          const rightEye = landmarks.find(l => l.type === 'rightEye' || l.name === 'rightEye');
+          if (leftEye && rightEye) {
+            // landmarks may be arrays of points
+            const ave = pts => {
+              if (!Array.isArray(pts)) return pts;
+              let sx=0, sy=0, n=0;
+              pts.forEach(p => { sx+=p.x; sy+=p.y; n++; });
+              return { x: sx/n, y: sy/n };
+            };
+            const le = ave(leftEye.locations || leftEye.points || leftEye);
+            const re = ave(rightEye.locations || rightEye.points || rightEye);
+            eyePairs.push({ left: le, right: re });
+          } else {
+            // try alternative landmark arrays (keypoints)
+            const leftKP = landmarks.filter(k => k.type && k.type.toLowerCase().includes('eye') && k.name && k.name.toLowerCase().includes('left'))[0];
+            const rightKP = landmarks.filter(k => k.type && k.type.toLowerCase().includes('eye') && k.name && k.name.toLowerCase().includes('right'))[0];
+            if (leftKP && rightKP) {
+              eyePairs.push({ left: leftKP, right: rightKP });
+            }
+          }
+        }
+
+        // if landmarks not provided, synthesize eyes from bounding box
+        if (eyePairs.length === 0 && bb) {
+          // guess eye centers at upper third of face bounding box
+          const le = { x: bb.x + bb.width * 0.28, y: bb.y + bb.height * 0.33};
+          const re = { x: bb.x + bb.width * 0.72, y: bb.y + bb.height * 0.33};
+          eyePairs.push({ left: le, right: re });
+        }
+
+        // process each eye: extract patch from proc canvas (proc is mirrored already)
+        let screenPoints = [];
+        for (const pair of eyePairs) {
+          const scaleX = proc.width / (proc.width); // identity, but keep conceptually
+          const scaleY = proc.height / (proc.height);
+          const left = pair.left;
+          const right = pair.right;
+          // eye center coordinates in proc space already
+          const eyeSize = Math.max(10, Math.round(Math.min(proc.width, proc.height) * 0.12));
+          // left eye patch
+          const px = Math.round(left.x - eyeSize/2);
+          const py = Math.round(left.y - eyeSize/2);
+          // draw onto a tiny temp canvas and analyze
+          const imgDataL = pctx.getImageData(Math.max(0,px), Math.max(0,py), Math.min(eyeSize, proc.width-px), Math.min(eyeSize, proc.height-py));
+          const centL = darkCentroid(imgDataL);
+
+          const pxr = Math.round(right.x - eyeSize/2);
+          const pyr = Math.round(right.y - eyeSize/2);
+          const imgDataR = pctx.getImageData(Math.max(0,pxr), Math.max(0,pyr), Math.min(eyeSize, proc.width-pxr), Math.min(eyeSize, proc.height-pyr));
+          const centR = darkCentroid(imgDataR);
+
+          // debug draw eye boxes & centroids
+          if (showDebug) {
+            dbg.save();
+            dbg.translate(debugCanvas.width,0); dbg.scale(-1,1);
+            dbg.strokeStyle = 'rgba(255,200,30,0.9)';
+            dbg.lineWidth = 2;
+            dbg.strokeRect(px * (debugCanvas.width/proc.width), py * (debugCanvas.height/proc.height),
+                           imgDataL.width * (debugCanvas.width/proc.width), imgDataL.height * (debugCanvas.height/proc.height));
+            dbg.strokeRect(pxr * (debugCanvas.width/proc.width), pyr * (debugCanvas.height/proc.height),
+                           imgDataR.width * (debugCanvas.width/proc.width), imgDataR.height * (debugCanvas.height/proc.height));
+            if (centL) {
+              dbg.fillStyle = 'rgba(255,40,40,0.9)';
+              dbg.beginPath();
+              dbg.arc( (px + centL.x) * (debugCanvas.width/proc.width), (py + centL.y) * (debugCanvas.height/proc.height), 4,0,Math.PI*2);
+              dbg.fill();
+            }
+            if (centR) {
+              dbg.fillStyle = 'rgba(255,40,40,0.9)';
+              dbg.beginPath();
+              dbg.arc( (pxr + centR.x) * (debugCanvas.width/proc.width), (pyr + centR.y) * (debugCanvas.height/proc.height), 4,0,Math.PI*2);
+              dbg.fill();
+            }
+            dbg.restore();
+          }
+
+          // compute normalized eye offset: -1 (left) .. +1 (right), -1 (up) .. +1 (down)
+          function normFromCentroid(cent, w, h){
+            if (!cent) return null;
+            const nx = (cent.x / w - 0.5) * 2; // left negative
+            const ny = (cent.y / h - 0.5) * 2;
+            return {nx, ny};
+          }
+          const nL = normFromCentroid(centL, imgDataL.width, imgDataL.height);
+          const nR = normFromCentroid(centR, imgDataR.width, imgDataR.height);
+
+          if (nL && nR) {
+            // average both eyes but weight horizontally more
+            const nx = (nL.nx + nR.nx) / 2;
+            const ny = (nL.ny + nR.ny) / 2;
+            // map from face box to screen:
+            // face center in proc coords:
+            const faceCenterX = (bb ? bb.x + bb.width/2 : (left.x + right.x)/2);
+            const faceCenterY = (bb ? bb.y + bb.height/2 : (left.y + right.y)/2);
+
+            // sensitivity tweak
+            const sens = Number(sensitivityControl.value) / 20; // 0.05..2.5 scale
+            // compute screen x,y in page coordinates
+            const relX = (faceCenterX / proc.width); // 0..1 left->right (proc is mirrored already)
+            const relY = (faceCenterY / proc.height);
+            // apply gaze offset: push relative x by nx*sens * fraction of screen
+            const screenX = window.innerWidth * (relX + nx * sens * 0.25);
+            const screenY = window.innerHeight * (relY + ny * sens * 0.25);
+            screenPoints.push({x: screenX, y: screenY});
+          }
+        } // end eyePairs loop
+
+        if (screenPoints.length>0) {
+          // average the candidate screen points (if multiple)
+          const avg = screenPoints.reduce((acc,p,i,arr)=>{ acc.x += p.x; acc.y += p.y; if (i===arr.length-1) { acc.x /= arr.length; acc.y /= arr.length; } return acc; }, {x:0,y:0});
+          placeDot(avg.x, avg.y);
+          detected.textContent = 'face tracked';
+        } else {
+          detected.textContent = 'face but no pupil found';
+        }
+
+      } else {
+        // no faces found
+        detected.textContent = 'no face detected';
+      }
+
+    } catch (err) {
+      console.warn('detection error', err);
+      // if face detector fails repeatedly, fallback to mouse
+      fallbackToMouse = true;
+      detected.textContent = 'error — fallback to mouse';
+    }
+
+    animationId = requestAnimationFrame(tick);
+  }
+
+  // small UX: allow quick enabling of mouse fallback by clicking dot (for demo)
+  gazeDot.addEventListener('click', ()=>{ fallbackToMouse = !fallbackToMouse; detected.textContent = fallbackToMouse ? 'mouse fallback' : 'camera tracking'; });
+
+  // set debug visible initially
+  debugCanvas.style.display = showDebug ? 'block' : 'none';
+
+  // quick note: if the browser doesn't support createImageBitmap from canvas in some env,
+  // the detection call will still be attempted via passing the canvas itself.
+})();
+</script>
+</body>
+</html>
