@@ -1,0 +1,85 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Multi-User Click Race</title>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<style>
+  body { font-family: sans-serif; display: flex; flex-direction: column; align-items: center; margin-top: 50px; }
+  #game { margin-top: 20px; }
+  button { padding: 10px 20px; font-size: 18px; margin-top: 20px; }
+  #leaderboard { margin-top: 20px; }
+</style>
+</head>
+<body>
+<h1>Click Race!</h1>
+<input id="username" placeholder="Enter your name"/>
+<button id="join">Join Game</button>
+
+<div id="game" style="display:none;">
+  <button id="clickBtn">Click Me!</button>
+  <p>Your clicks: <span id="myClicks">0</span></p>
+</div>
+
+<h2>Leaderboard</h2>
+<ul id="leaderboard"></ul>
+
+<script>
+  // --- Supabase Setup ---
+  const SUPABASE_URL = https://duczuscnibaxvvsstgft.supabase.co;
+  const SUPABASE_KEY = eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImR1Y3p1c2NuaWJheHZ2c3N0Z2Z0Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjMyNTIyMDMsImV4cCI6MjA3ODgyODIwM30.HYfeVWrgavtXm2vbvgsTtlgEGYBhZG1TPEzkRQ-Squ0;
+  const supabase = Supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
+
+  let userId = null;
+  let clicks = 0;
+
+  // --- Join Game ---
+  document.getElementById('join').addEventListener('click', async () => {
+    const username = document.getElementById('username').value.trim();
+    if (!username) return alert("Enter a name!");
+
+    const { data, error } = await supabase.from('players').insert([{ username, clicks: 0 }]).select().single();
+    if (error) return console.error(error);
+
+    userId = data.id;
+    document.getElementById('game').style.display = 'block';
+    document.getElementById('join').disabled = true;
+    document.getElementById('username').disabled = true;
+    subscribeToLeaderboard();
+  });
+
+  // --- Click Button ---
+  document.getElementById('clickBtn').addEventListener('click', async () => {
+    clicks++;
+    document.getElementById('myClicks').textContent = clicks;
+    await supabase.from('players').update({ clicks }).eq('id', userId);
+  });
+
+  // --- Real-Time Leaderboard ---
+  async function subscribeToLeaderboard() {
+    const { data, error } = await supabase.from('players').select();
+    if (error) console.error(error);
+    updateLeaderboard(data);
+
+    supabase.channel('public:players')
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'players' }, payload => {
+        updateLeaderboard(payload.new);
+      })
+      .subscribe();
+  }
+
+  function updateLeaderboard(players) {
+    const leaderboard = document.getElementById('leaderboard');
+    if (!Array.isArray(players)) players = [players];
+    leaderboard.innerHTML = '';
+    players.sort((a, b) => b.clicks - a.clicks);
+    players.forEach(p => {
+      const li = document.createElement('li');
+      li.textContent = `${p.username}: ${p.clicks}`;
+      leaderboard.appendChild(li);
+    });
+  }
+</script>
+</body>
+</html>
