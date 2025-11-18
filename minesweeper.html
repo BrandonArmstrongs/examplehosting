@@ -1,0 +1,305 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8" />
+  <title>Minesweeper</title>
+  <link rel="icon" type="image/x-icon" href="4759.png">
+  <style>
+    #myContainer { position: relative; }
+    .clickeda { z-index:1; cursor: pointer; position:absolute; width:50px; height:50px; background-color: rgb(255, 188, 129); }
+    .clickedb { z-index:1; cursor: pointer; position:absolute; width:50px; height:50px; background-color: rgb(201, 147, 100); }
+    .outline { z-index:0; border:6px ridge rgb(201,147,100); width:47px; height:48px; position:absolute; }
+    .notamineforrealziambeinghonesttrustmeplz { font-size:1rem; }
+    .mine { font-size:0px; }
+    .unclickeda { z-index:9999; cursor:pointer; position:absolute; border:0px solid rgb(133, 255, 129); width:50px; height:50px; background-color: rgb(133, 255, 129); }
+    .unclickedb { z-index:9999; cursor:pointer; position:absolute; border:0px solid rgb(111, 207, 108); width:50px; height:50px; background-color: rgb(111, 207, 108); }
+    .startbutton { cursor: pointer;font-size:3rem; width:20%; height:10%; position:absolute; z-index:9999999999999999; border-radius:2rem; left:40%; top:75%; align-items:center; background-image: linear-gradient(to right, #8400ff, #0000ff); transition: background-image 2s ease-in-out; }
+    .empty, .Mine { z-index: 1; font-size: 0px;}
+    .hidedsp { position:absolute; left:0px; top:0px; height:100%; width:100%; z-index:999999; background-color:black; }
+    .gradient-element { background-image: linear-gradient(to right, #552b76, #383893); transition: background-image 1ms ease-in-out; }
+    button { padding:0; margin:0; border:0; background:transparent; }
+  </style>
+</head>
+<body>
+  <button class="startbutton" id="startBtn">Start Game</button>
+  <div class="hidedsp" id="hidedsp"></div>
+  <p class="mine" id="cool">dddd</p>
+  <div id="myContainer"></div>
+
+  <script>
+    // --- audio / start button handling (unchanged) ---
+    const audio = new Audio('music.wav');
+    audio.loop = true;
+    audio.preload = 'auto';
+
+    const startBtn = document.getElementById('startBtn');
+    const hidedsp = document.getElementById('hidedsp');
+    startBtn.addEventListener('click', () => {
+      audio.play().then(() => {
+        startBtn.style.display = 'none';
+        hidedsp.style.display = 'none';
+      }).catch(err => {
+        console.log('Autoplay blocked:', err);
+      });
+    });
+
+    // try muted autoplay to prompt
+    audio.muted = true;
+    audio.play().catch(() => {});
+    audio.muted = false;
+
+    // --- game variables ---
+    let buttonList = [];
+    let toCheck = [];
+
+    let basem = 25;
+    let size = 10;            // board width / height (can be changed to any positive integer)
+    let prog = 0;
+    let d = 0;
+    let dbase = 55;
+    let divi = size;
+    let dividprog = 0;
+    let lmar = 0;
+    let lmarg = 0;
+    let l = 0;
+    let randomIndex = 0;
+    let acsize = size * size;
+
+    const parentContainer = document.getElementById('myContainer');
+    let basicArray = new Array(acsize).fill('empty');
+    let clicked = new Array(acsize).fill('0');
+    let surround = new Array(acsize).fill(0);
+    let newnum = 0;
+    let flagged = new Array(acsize).fill('0');
+
+    document.getElementById("cool").innerHTML = basicArray;
+
+    // --- safe neighbor check utilities (works for any size) ---
+    function inBounds(index) {
+      return index >= 0 && index < basicArray.length;
+    }
+    function rowOf(index) {
+      return Math.floor(index / size);
+    }
+    function colOf(index) {
+      return index % size;
+    }
+
+    // Replacement for findnum and neighbors that avoids wrapping (works for any size)
+    function findnum(square) {
+      let count = 0;
+      const r = rowOf(square);
+      const c = colOf(square);
+
+      // iterate neighbors by delta row/col
+      for (let dr = -1; dr <= 1; dr++) {
+        for (let dc = -1; dc <= 1; dc++) {
+          if (dr === 0 && dc === 0) continue;
+          const nr = r + dr;
+          const nc = c + dc;
+          if (nr >= 0 && nr < size && nc >= 0 && nc < size) {
+            const idx = nr * size + nc;
+            if (basicArray[idx] === 'Mine') count++;
+          }
+        }
+      }
+      surround[square] = count;
+    }
+
+    function actuallyRevealNeighbors(square) {
+      const r = rowOf(square);
+      const c = colOf(square);
+
+      for (let dr = -1; dr <= 1; dr++) {
+        for (let dc = -1; dc <= 1; dc++) {
+          if (dr === 0 && dc === 0) continue;
+          const nr = r + dr;
+          const nc = c + dc;
+          if (nr >= 0 && nr < size && nc >= 0 && nc < size) {
+            const newIndex = nr * size + nc;
+            if (!toCheck.includes(newIndex) && clicked[newIndex] === '0') {
+              toCheck.push(newIndex);
+            }
+          }
+        }
+      }
+    }
+
+    // place mines
+    function addmines(number) {
+      const count = Math.floor(number);
+      for (let i = 0; i < count; i++) {
+        let randomIndex = Math.floor(Math.random() * basicArray.length);
+        basicArray[randomIndex] = 'Mine';
+      }
+    }
+
+    // initialize board
+    addmines(acsize / 10);  // same as original: 10% mines
+
+    // compute surround for every cell (needs to be done after mines are placed)
+    for (let i = 0; i < acsize; i++) {
+      findnum(i);
+    }
+
+    // --- build DOM (slightly adjusted to set px units) ---
+    prog = 0;
+    basicArray.forEach(item => {
+      const newOutline = document.createElement('div');
+      const newDiv = document.createElement('div');
+      const newButton = document.createElement('button');
+
+      findnum(prog); // keep compatibility: recompute if needed
+
+      if (item === 'Mine') {
+        newDiv.classList.add("Mine");
+        const img = document.createElement("img");
+        img.src = "4759.png";
+        img.style.width = "100%";
+        img.style.height = "100%";
+        newDiv.textContent = "mine";
+        newDiv.appendChild(img);
+      } else {
+        newDiv.classList.add("notamineforrealziambeinghonesttrustmeplz");
+        const img = document.createElement("img");
+        let idk = surround[prog];
+        img.src = idk + ".png";
+        img.style.width = "100%";
+        img.style.height = "100%";
+        newDiv.appendChild(img);
+      }
+
+      dividprog = prog / divi;
+      let floorprog = Math.floor(dividprog);
+      d = dbase * floorprog + basem;
+      newDiv.style.top = (d - 1) + "px";
+      newButton.style.top = (d - 1) + "px";
+      newOutline.style.top = (d - 6) + "px";
+
+      lmar = floorprog * divi;
+      lmarg = prog - lmar;
+      l = lmarg * dbase + basem;
+      newDiv.style.left = (l - 1) + "px";
+      newOutline.style.left = (l - 6) + "px";
+      newButton.style.left = (l - 1) + "px";
+
+      let currentIndex = prog;
+      newButton.onclick = () => hewwo(currentIndex);
+      newButton.addEventListener('contextmenu', (event) => {
+        event.preventDefault();
+        flagged[currentIndex] = flagged[currentIndex] === 1 ? 0 : 1;
+        redrawbuttons();
+      });
+
+      let idkwtfthisis = prog % 2;
+      idkwtfthisis += floorprog % 2;
+      if (idkwtfthisis === 1) {
+        newButton.classList.add("unclickeda");
+      } else {
+        newButton.classList.add("unclickedb");
+      }
+      if (idkwtfthisis === 1) {
+        newDiv.classList.add("clickeda");
+      } else {
+        newDiv.classList.add("clickedb");
+      }
+
+      newOutline.classList.add("outline");
+      parentContainer.appendChild(newOutline);
+      parentContainer.appendChild(newDiv);
+      if (clicked[prog] === '0') {
+        parentContainer.appendChild(newButton);
+      }
+      buttonList.push(newButton);
+
+      prog++;
+    });
+
+    // --- reveal logic ---
+    function revealsquares() {
+      while (toCheck.length > 0) {
+        const current = toCheck.shift();
+        clicked[current] = '1';
+        if (surround[current] === 0 && basicArray[current] !== 'Mine') {
+          actuallyRevealNeighbors(current);
+        }
+      }
+    }
+
+    function hewwo(index) {
+      if (clicked[index] === '1') return;
+      if (flagged[index] === 1) return;
+      clicked[index] = '1';
+      toCheck.push(index);
+      revealsquares();
+
+      // remove current buttons
+      for (const btn of buttonList) {
+        if (btn) btn.remove();
+      }
+      buttonList = [];
+
+      redrawbuttons();
+    }
+
+    function redrawbuttons() {
+      // remove any existing buttons
+      for (const btn of buttonList) {
+        if (btn) btn.remove();
+      }
+      buttonList = [];
+      prog = 0;
+
+      basicArray.forEach(item => {
+        const newButton = document.createElement('button');
+        const img = document.createElement("img");
+
+        let floorprog = Math.floor(prog / divi);
+        let d = dbase * floorprog + basem;
+        let lmarg = prog - floorprog * divi;
+        let l = lmarg * dbase + basem;
+
+        newButton.style.top = (d - 1) + "px";
+        newButton.style.left = (l - 1) + "px";
+
+        let currentIndex = prog;
+
+        newButton.onclick = () => hewwo(currentIndex);
+        newButton.addEventListener('contextmenu', (event) => {
+          event.preventDefault();
+          flagged[currentIndex] = flagged[currentIndex] === 1 ? 0 : 1;
+          redrawbuttons();
+        });
+
+        if ((prog % 2 + floorprog % 2) === 1) {
+          newButton.classList.add("unclickeda");
+        } else {
+          newButton.classList.add("unclickedb");
+        }
+
+        if (clicked[prog] === '0') {
+          if (flagged[prog] === 1) {
+            img.src = "flag.png";
+            img.style.width = "100%";
+            img.style.height = "100%";
+            newButton.appendChild(img);
+          }
+          parentContainer.appendChild(newButton);
+          buttonList.push(newButton);
+        } else {
+          // if clicked, reveal the underlying cell (keep existing divs in place)
+          // nothing needed here because the underlying divs are already in DOM
+        }
+
+        prog++;
+      });
+    }
+
+    // optional utility (keeps flagged values sane)
+    function getouttathecodebruh(hi) {
+      flagged[hi] = Math.floor(flagged[hi] % 1);
+    }
+
+  </script>
+</body>
+</html>
